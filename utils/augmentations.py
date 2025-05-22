@@ -16,6 +16,8 @@ from utils.metrics import bbox_ioa
 IMAGENET_MEAN = 0.485, 0.456, 0.406  # RGB mean
 IMAGENET_STD = 0.229, 0.224, 0.225  # RGB standard deviation
 
+_hist_equalize_warned_once = False
+
 
 class Albumentations:
     """Provides optional data augmentation for YOLOv5 using Albumentations library if installed."""
@@ -76,19 +78,27 @@ def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
     if hgain or sgain or vgain:
         r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
         hue, sat, val = cv2.split(cv2.cvtColor(im, cv2.COLOR_BGR2HSV))
-        dtype = im.dtype  # uint8
+        dtype = im.dtype  # uint8 or uint16
+        max_val = 4095 if dtype == np.uint16 else 255
 
-        x = np.arange(0, 256, dtype=r.dtype)
+        x = np.arange(0, max_val + 1, dtype=r.dtype) # Ensure x covers the full range for uint16
         lut_hue = ((x * r[0]) % 180).astype(dtype)
-        lut_sat = np.clip(x * r[1], 0, 255).astype(dtype)
-        lut_val = np.clip(x * r[2], 0, 255).astype(dtype)
+        lut_sat = np.clip(x * r[1], 0, max_val).astype(dtype)
+        lut_val = np.clip(x * r[2], 0, max_val).astype(dtype)
 
         im_hsv = cv2.merge((cv2.LUT(hue, lut_hue), cv2.LUT(sat, lut_sat), cv2.LUT(val, lut_val)))
         cv2.cvtColor(im_hsv, cv2.COLOR_HSV2BGR, dst=im)  # no return needed
 
 
 def hist_equalize(im, clahe=True, bgr=False):
-    """Equalizes image histogram, with optional CLAHE, for BGR or RGB image with shape (n,m,3) and range 0-255."""
+    """Equalizes image histogram, with optional CLAHE, for BGR or RGB image with shape (n,m,3). Skips for non-8-bit images."""
+    global _hist_equalize_warned_once
+    if im.dtype != np.uint8:
+        if not _hist_equalize_warned_once:
+            LOGGER.warning("Skipping hist_equalize for non-8-bit images.")
+            _hist_equalize_warned_once = True
+        return im
+
     yuv = cv2.cvtColor(im, cv2.COLOR_BGR2YUV if bgr else cv2.COLOR_RGB2YUV)
     if clahe:
         c = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
@@ -243,7 +253,7 @@ def copy_paste(im, labels, segments, p=0.5):
     n = len(segments)
     if p and n:
         h, w, c = im.shape  # height, width, channels
-        im_new = np.zeros(im.shape, np.uint8)
+        im_new = np.zeros(im.shape, dtype=im.dtype)
         for j in random.sample(range(n), k=round(p * n)):
             l, s = labels[j], segments[j]
             box = w - l[3], l[2], w - l[1], l[4]
@@ -280,7 +290,9 @@ def cutout(im, labels, p=0.5):
             ymax = min(h, ymin + mask_h)
 
             # apply random color mask
-            im[ymin:ymax, xmin:xmax] = [random.randint(64, 191) for _ in range(3)]
+            fill_value_min = int(4095 * 0.25) if im.dtype == np.uint16 else 64
+            fill_value_max = int(4095 * 0.75) if im.dtype == np.uint16 else 191
+            im[ymin:ymax, xmin:xmax] = [random.randint(fill_value_min, fill_value_max) for _ in range(3)]
 
             # return unobscured labels
             if len(labels) and s > 0.03:
@@ -298,7 +310,7 @@ def mixup(im, labels, im2, labels2):
     See https://arxiv.org/pdf/1710.09412.pdf for details.
     """
     r = np.random.beta(32.0, 32.0)  # mixup ratio, alpha=beta=32.0
-    im = (im * r + im2 * (1 - r)).astype(np.uint8)
+    im = (im * r + im2 * (1 - r)).astype(im.dtype)
     labels = np.concatenate((labels, labels2), 0)
     return im, labels
 
@@ -434,7 +446,10 @@ class ToTensor:
         im = np.array HWC in BGR order
         """
         im = np.ascontiguousarray(im.transpose((2, 0, 1))[::-1])  # HWC to CHW -> BGR to RGB -> contiguous
-        im = torch.from_numpy(im)  # to torch
-        im = im.half() if self.half else im.float()  # uint8 to fp16/32
-        im /= 255.0  # 0-255 to 0.0-1.0
-        return im
+        im_tensor = torch.from_numpy(im)  # to torch
+        im_tensor = im_tensor.half() if self.half else im_tensor.float()  # uint8/uint16 to fp16/32
+        # Determine normalization factor based on the max value in the input tensor.
+        # This dynamically handles 8-bit (0-255) and 12-bit (0-4095) images.
+        normalization_factor = 4095.0 if im_tensor.max() > 255.0 else 255.0
+        im_tensor /= normalization_factor  # 0-255/4095 to 0.0-1.0
+        return im_tensor

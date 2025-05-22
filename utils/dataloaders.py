@@ -392,8 +392,10 @@ class LoadImages:
         else:
             # Read image
             self.count += 1
-            im0 = cv2.imread(path)  # BGR
+            im0 = cv2.imread(path, cv2.IMREAD_UNCHANGED)  # BGR
             assert im0 is not None, f"Image Not Found {path}"
+            if isinstance(im0, np.ndarray):
+                im0 = im0 >> 4
             s = f"image {self.count}/{self.nf} {path}: "
 
         if self.transforms:
@@ -860,21 +862,27 @@ class LoadImagesAndLabels(Dataset):
             if fn.exists():  # load npy
                 im = np.load(fn)
             else:  # read image
-                im = cv2.imread(f)  # BGR
+                im = cv2.imread(f, cv2.IMREAD_UNCHANGED)  # BGR
                 assert im is not None, f"Image Not Found {f}"
+                if isinstance(im, np.ndarray):
+                    im = im >> 4
             h0, w0 = im.shape[:2]  # orig hw
             r = self.img_size / max(h0, w0)  # ratio
             if r != 1:  # if sizes are not equal
                 interp = cv2.INTER_LINEAR if (self.augment or r > 1) else cv2.INTER_AREA
                 im = cv2.resize(im, (math.ceil(w0 * r), math.ceil(h0 * r)), interpolation=interp)
             return im, (h0, w0), im.shape[:2]  # im, hw_original, hw_resized
+        # If RAM cached, it's already processed by load_image during caching, so no need to shift again here.
         return self.ims[i], self.im_hw0[i], self.im_hw[i]  # im, hw_original, hw_resized
 
     def cache_images_to_disk(self, i):
         """Saves an image to disk as an *.npy file for quicker loading, identified by index `i`."""
         f = self.npy_files[i]
         if not f.exists():
-            np.save(f.as_posix(), cv2.imread(self.im_files[i]))
+            img_to_cache = cv2.imread(self.im_files[i], cv2.IMREAD_UNCHANGED)
+            if isinstance(img_to_cache, np.ndarray):
+                img_to_cache = img_to_cache >> 4
+            np.save(f.as_posix(), img_to_cache)
 
     def load_mosaic(self, index):
         """Loads a 4-image mosaic for YOLOv5, combining 1 selected and 3 random images, with labels and segments."""

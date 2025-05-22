@@ -192,8 +192,35 @@ python train.py --data coco.yaml --epochs 300 --weights '' --cfg yolov5x.yaml --
 - **[ClearML Logging](https://docs.ultralytics.com/yolov5/tutorials/clearml_logging_integration/)**: Integrate with [ClearML](https://clear.ml/) for experiment tracking.
 - **[Neural Magic DeepSparse Integration](https://docs.ultralytics.com/yolov5/tutorials/neural_magic_pruning_quantization/)**: Accelerate inference with DeepSparse.
 - **[Comet Logging](https://docs.ultralytics.com/yolov5/tutorials/comet_logging_integration/)** 🌟 **NEW**: Log experiments using [Comet ML](https://www.comet.com/site/).
+- **[12-bit TIFF Image Support](##12-bit-tiff-image-support)**: Guide on using 12-bit TIFF images for training.
 
 </details>
+
+---
+
+### 12-bit TIFF Image Support
+
+YOLOv5 now includes experimental support for training with 12-bit TIFF images. This is particularly useful for datasets from specialized sensors that capture a higher dynamic range than standard 8-bit images.
+
+**Key Changes:**
+- Images stored as 16-bit TIFF files, where the actual image data occupies the 12 most significant bits, are supported.
+- The `LoadImagesAndLabels` dataloader automatically handles these images by reading them as `cv2.IMREAD_UNCHANGED` and then applying a right bit-shift by 4 (`image = image >> 4`) to bring the 12-bit data into the 0-4095 range.
+- Normalization (e.g., in `AutoShape` for inference or `ToTensor` in augmentations) has been updated to dynamically detect if an image's maximum value exceeds 255. If it does, normalization to the 0-1 range will use 4095.0 as the divisor; otherwise, it defaults to 255.0.
+- Several augmentation functions (`augment_hsv`, `cutout`, `mixup`, `copy_paste`) have been adjusted to correctly handle `np.uint16` data types and the 0-4095 value range. `hist_equalize` will be skipped for non-8-bit images with a warning.
+- Image display and logging utilities (e.g., `plot_images`, `save_one_box`, and logger callbacks) now scale 12-bit data (0-4095 range) down to an 8-bit range (0-255) before visualization or saving as common image formats like JPEG/PNG.
+
+**How to Use:**
+1.  Ensure your 12-bit images are saved as 16-bit single-channel or multi-channel TIFF files (e.g., `.tif` or `.tiff`). The dataloader expects the 12-bit data to be in the most significant bits.
+2.  Prepare your dataset YAML file and label files as usual.
+3.  Train your model. The dataloader and augmentation pipeline will automatically apply the necessary conversions.
+
+**Example Test Scripts:**
+Due to potential environment inconsistencies in automated testing, scripts for generating a sample 12-bit TIFF and for testing the dataloader are provided separately. You may need to run these manually in an environment with `opencv-python`, `numpy`, `torch`, and `pyyaml` installed.
+- For generating a sample 12-bit TIFF: See `create_tiff_script.md`
+- For testing the 12-bit dataloader: See `test_12bit_loader_script.md`
+
+**Note:** This is an experimental feature. Please report any issues or feedback on GitHub.
+---
 
 ## 🧩 Integrations
 

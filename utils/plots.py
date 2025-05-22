@@ -161,16 +161,32 @@ def plot_images(images, targets, paths=None, fname="images.jpg", names=None):
     bs, _, h, w = images.shape  # batch size, _, height, width
     bs = min(bs, max_subplots)  # limit plot images
     ns = np.ceil(bs**0.5)  # number of subplots (square)
-    if np.max(images[0]) <= 1:
-        images *= 255  # de-normalise (optional)
-
     # Build Image
     mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)  # init
     for i, im in enumerate(images):
         if i == max_subplots:  # if last batch has fewer images than we expect
             break
         x, y = int(w * (i // ns)), int(h * (i % ns))  # block origin
-        im = im.transpose(1, 2, 0)
+        im = im.transpose(1, 2, 0) # CHW to HWC
+
+        # Ensure im is uint8 for display
+        if isinstance(im, np.ndarray):
+            if im.dtype == np.float32 or im.dtype == np.float16: # Assuming 0-1 range from dataloader
+                if np.max(im) <= 1.0 + 1e-3: # Add tolerance for float comparison
+                    im = (im * 255.0).astype(np.uint8)
+                elif np.max(im) > 255: # Potentially float 0-4095
+                    im = (im / 4095.0 * 255.0).astype(np.uint8)
+                else: # Float but already in 0-255 range
+                    im = im.astype(np.uint8)
+            elif im.dtype == np.uint16: # If somehow it's still uint16 (0-4095)
+                im = (im / 4095.0 * 255.0).astype(np.uint8)
+            elif im.dtype != np.uint8: # Other types, try to cast
+                im = im.astype(np.uint8)
+        else: # Not numpy array (e.g. PIL image), try to convert
+             # This path should ideally not be taken if images is a numpy array from torch tensor
+            im = np.array(im).astype(np.uint8)
+
+
         mosaic[y : y + h, x : x + w, :] = im
 
     # Resize (optional)
@@ -509,6 +525,11 @@ def save_one_box(xyxy, im, file=Path("im.jpg"), gain=1.02, pad=10, square=False,
     xyxy = xywh2xyxy(b).long()
     clip_boxes(xyxy, im.shape)
     crop = im[int(xyxy[0, 1]) : int(xyxy[0, 3]), int(xyxy[0, 0]) : int(xyxy[0, 2]), :: (1 if BGR else -1)]
+    if crop.dtype == np.uint16:
+        crop = (crop / 4095.0 * 255.0).astype(np.uint8)
+    elif crop.dtype != np.uint8: # Ensure it's uint8 if not already
+        crop = crop.astype(np.uint8)
+
     if save:
         file.parent.mkdir(parents=True, exist_ok=True)  # make directory
         f = str(increment_path(file).with_suffix(".jpg"))

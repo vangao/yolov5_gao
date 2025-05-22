@@ -901,7 +901,11 @@ class AutoShape(nn.Module):
             shape1 = [make_divisible(x, self.stride) for x in np.array(shape1).max(0)]  # inf shape
             x = [letterbox(im, shape1, auto=False)[0] for im in ims]  # pad
             x = np.ascontiguousarray(np.array(x).transpose((0, 3, 1, 2)))  # stack and BHWC to BCHW
-            x = torch.from_numpy(x).to(p.device).type_as(p) / 255  # uint8 to fp16/32
+            x_tensor = torch.from_numpy(x).to(p.device).type_as(p)
+            # Determine normalization factor based on the max value in the input tensor x_tensor.
+            # This dynamically handles 8-bit (0-255) and 12-bit (0-4095) images.
+            normalization_factor = 4095.0 if x_tensor.max() > 255.0 else 255.0
+            x = x_tensor / normalization_factor  # uint8/uint16 to fp16/32
 
         with amp.autocast(autocast):
             # Inference

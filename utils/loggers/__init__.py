@@ -227,10 +227,16 @@ class Loggers:
 
     def on_val_image_end(self, pred, predn, path, names, im):
         """Callback that logs a validation image and its predictions to WandB or ClearML."""
+        im_display = im
+        if isinstance(im, np.ndarray) and im.dtype == np.uint16:
+            im_display = (im / 4095.0 * 255.0).astype(np.uint8)
+        elif isinstance(im, np.ndarray) and im.dtype != np.uint8: # Ensure it's uint8 for loggers
+            im_display = im.astype(np.uint8)
+
         if self.wandb:
-            self.wandb.val_one_image(pred, predn, path, names, im)
+            self.wandb.val_one_image(pred, predn, path, names, im_display)
         if self.clearml:
-            self.clearml.log_image_with_boxes(path, pred, names, im)
+            self.clearml.log_image_with_boxes(path, pred, names, im_display)
 
     def on_val_batch_end(self, batch_i, im, targets, paths, shapes, out):
         """Logs validation batch results to Comet ML during training at the end of each validation batch."""
