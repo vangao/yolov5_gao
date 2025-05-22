@@ -332,8 +332,18 @@ def run(
             if cuda:
                 im = im.to(device, non_blocking=True)
                 targets = targets.to(device)
-            im = im.half() if half else im.float()  # uint8 to fp16/32
-            im /= 255  # 0 - 255 to 0.0 - 1.0
+            im = im.half() if half else im.float()  # Convert to float (fp16 or fp32)
+                                                  # At this point, if 'im' came from a uint16 numpy array 
+                                                  # (e.g. 12-bit TIFF data, 0-4095 range), 
+                                                  # its values are still in that original range.
+                                                  # If from uint8, values are in 0-255 range.
+
+            # Determine normalization factor based on the approximate range of the float tensor values.
+            # A simple check of the max value can distinguish between 0-255 range and 0-4095 range.
+            if im.max().item() > 256.0:  # If max value suggests it's not 8-bit data (e.g. > 255 after float conversion)
+                im /= 4095.0  # Normalize 12-bit data (assumed to be 0-4095) to 0-1
+            else:
+                im /= 255.0   # Normalize 8-bit data (assumed to be 0-255) to 0-1
             nb, _, height, width = im.shape  # batch size, channels, height, width
 
         # Inference
