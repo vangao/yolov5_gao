@@ -73,6 +73,8 @@ def denormalize(x, mean=IMAGENET_MEAN, std=IMAGENET_STD):
 
 def augment_hsv(im, hgain=0.5, sgain=0.5, vgain=0.5):
     """Applies HSV color-space augmentation to an image with random gains for hue, saturation, and value."""
+    if im.dtype != np.uint8:
+        return
     if hgain or sgain or vgain:
         r = np.random.uniform(-1, 1, 3) * [hgain, sgain, vgain] + 1  # random gains
         hue, sat, val = cv2.split(cv2.cvtColor(im, cv2.COLOR_BGR2HSV))
@@ -119,7 +121,7 @@ def replicate(im, labels):
     return im, labels
 
 
-def letterbox(im, new_shape=(640, 640), color=(114, 114, 114), auto=True, scaleFill=False, scaleup=True, stride=32):
+def letterbox(im, new_shape=(640, 640), color=(1824, 1824, 1824), auto=True, scaleFill=False, scaleup=True, stride=32):
     """Resizes and pads image to new_shape with stride-multiple constraints, returns resized image, ratio, padding."""
     shape = im.shape[:2]  # current shape [height, width]
     if isinstance(new_shape, int):
@@ -298,7 +300,7 @@ def mixup(im, labels, im2, labels2):
     See https://arxiv.org/pdf/1710.09412.pdf for details.
     """
     r = np.random.beta(32.0, 32.0)  # mixup ratio, alpha=beta=32.0
-    im = (im * r + im2 * (1 - r)).astype(np.uint8)
+    im = (im * r + im2 * (1 - r)).astype(np.uint16)
     labels = np.concatenate((labels, labels2), 0)
     return im, labels
 

@@ -860,8 +860,14 @@ class LoadImagesAndLabels(Dataset):
             if fn.exists():  # load npy
                 im = np.load(fn)
             else:  # read image
-                im = cv2.imread(f)  # BGR
-                assert im is not None, f"Image Not Found {f}"
+                if f.lower().endswith((".tif", ".tiff")):
+                    im = cv2.imread(f, cv2.IMREAD_UNCHANGED)
+                    assert im is not None, f"Image Not Found {f}"
+                    im = im >> 4
+                    im = im.astype(np.uint16)
+                else:
+                    im = cv2.imread(f)  # BGR
+                    assert im is not None, f"Image Not Found {f}"
             h0, w0 = im.shape[:2]  # orig hw
             r = self.img_size / max(h0, w0)  # ratio
             if r != 1:  # if sizes are not equal

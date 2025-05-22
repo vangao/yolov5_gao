@@ -901,7 +901,7 @@ class AutoShape(nn.Module):
             shape1 = [make_divisible(x, self.stride) for x in np.array(shape1).max(0)]  # inf shape
             x = [letterbox(im, shape1, auto=False)[0] for im in ims]  # pad
             x = np.ascontiguousarray(np.array(x).transpose((0, 3, 1, 2)))  # stack and BHWC to BCHW
-            x = torch.from_numpy(x).to(p.device).type_as(p) / 255  # uint8 to fp16/32
+            x = torch.from_numpy(x).to(p.device).type_as(p) / 4095.0  # uint16 (12-bit) to fp16/32
 
         with amp.autocast(autocast):
             # Inference

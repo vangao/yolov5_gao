@@ -161,8 +161,11 @@ def plot_images(images, targets, paths=None, fname="images.jpg", names=None):
     bs, _, h, w = images.shape  # batch size, _, height, width
     bs = min(bs, max_subplots)  # limit plot images
     ns = np.ceil(bs**0.5)  # number of subplots (square)
-    if np.max(images[0]) <= 1:
-        images *= 255  # de-normalise (optional)
+    # de-normalise based on assumed original range
+    # If max val is <=1, it's assumed to be normalized from 0-4095 (12-bit),
+    # else from 0-255 (8-bit). This provides some flexibility, though for our specific
+    # case, input to this function will likely always be 0-1 normalized from 12-bit.
+    images *= 4095 if np.max(images[0]) <= 1.0 else 255
 
     # Build Image
     mosaic = np.full((int(ns * h), int(ns * w), 3), 255, dtype=np.uint8)  # init
