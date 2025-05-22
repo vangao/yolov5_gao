@@ -930,7 +930,24 @@ class LoadImagesAndLabels(Dataset):
 
             # place img in img4
             if i == 0:  # top left
-                img4 = np.full((s * 2, s * 2, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+                # Determine dtype and fill_value for mosaic canvas based on first image's dtype
+                first_img_for_mosaic, _, _ = self.load_image(indices[0]) # Load one image to check its properties
+                canvas_dtype = first_img_for_mosaic.dtype
+                num_channels = first_img_for_mosaic.shape[2] if first_img_for_mosaic.ndim == 3 else 1 # Handle grayscale
+                fill_value = 114
+
+                if canvas_dtype == np.uint16:
+                    fill_value = int(round((114 / 255.0) * 4095.0))
+                elif canvas_dtype not in [np.uint8, np.float32, np.float16, np.float64]:
+                    # It's important to also import LOGGER from utils.general at the top of the file if not already there.
+                    # Assuming LOGGER is available (it's used elsewhere in the file).
+                    LOGGER.warning(f"Unexpected dtype {canvas_dtype} for mosaic canvas. Defaulting to uint8 behavior. This might affect 12-bit image processing.")
+                    canvas_dtype = np.uint8 # Fallback dtype
+                    fill_value = 114
+
+                # Ensure img4 is created with the correct number of channels
+                img4_shape = (s * 2, s * 2, num_channels) if num_channels > 1 else (s * 2, s * 2)
+                img4 = np.full(img4_shape, fill_value, dtype=canvas_dtype)
                 x1a, y1a, x2a, y2a = max(xc - w, 0), max(yc - h, 0), xc, yc  # xmin, ymin, xmax, ymax (large image)
                 x1b, y1b, x2b, y2b = w - (x2a - x1a), h - (y2a - y1a), w, h  # xmin, ymin, xmax, ymax (small image)
             elif i == 1:  # top right
@@ -992,7 +1009,22 @@ class LoadImagesAndLabels(Dataset):
 
             # place img in img9
             if i == 0:  # center
-                img9 = np.full((s * 3, s * 3, img.shape[2]), 114, dtype=np.uint8)  # base image with 4 tiles
+                # Determine dtype and fill_value for mosaic canvas based on first image's dtype
+                first_img_for_mosaic9, _, _ = self.load_image(indices[0])
+                canvas_dtype = first_img_for_mosaic9.dtype
+                num_channels = first_img_for_mosaic9.shape[2] if first_img_for_mosaic9.ndim == 3 else 1
+                fill_value = 114
+
+                if canvas_dtype == np.uint16:
+                    fill_value = int(round((114 / 255.0) * 4095.0))
+                elif canvas_dtype not in [np.uint8, np.float32, np.float16, np.float64]:
+                    # Assuming LOGGER is available.
+                    LOGGER.warning(f"Unexpected dtype {canvas_dtype} for mosaic9 canvas. Defaulting to uint8 behavior.")
+                    canvas_dtype = np.uint8
+                    fill_value = 114
+                
+                img9_shape = (s * 3, s * 3, num_channels) if num_channels > 1 else (s * 3, s * 3)
+                img9 = np.full(img9_shape, fill_value, dtype=canvas_dtype)
                 h0, w0 = h, w
                 c = s, s, s + w, s + h  # xmin, ymin, xmax, ymax (base) coordinates
             elif i == 1:  # top
