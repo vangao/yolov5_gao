@@ -843,9 +843,42 @@ class LoadImagesAndLabels(Dataset):
 
         # Convert
         img = img.transpose((2, 0, 1))[::-1]  # HWC to CHW, BGR to RGB
-        img = np.ascontiguousarray(img)
+        img = np.ascontiguousarray(img) # img is a numpy array.
+                                        # Its dtype could be uint8 (for 8-bit images),
+                                        # or uint16 (for 12-bit images after '>>4' shift, range 0-4095),
+                                        # or float32 (if changed by an augmentation like Albumentations).
 
-        return torch.from_numpy(img), labels_out, self.im_files[index], shapes
+        # Determine if the image data corresponds to a 12-bit range (0-4095)
+        # This heuristic checks the dtype of the numpy array `img` before conversion to tensor.
+        # If an augmentation converted it to float32, check its max value.
+        is_12_bit_data = False
+        if img.dtype == np.uint16 or img.dtype == np.int16: # Check for uint16 or int16
+            is_12_bit_data = True
+        elif img.dtype == np.float32 and np.max(img) > 255.0 + 1e-5: # Max value tolerance for float comparison
+            # If it's float and max value is high, it was likely 12-bit and not yet normalized to 0-1
+            is_12_bit_data = True
+        
+        img_tensor = torch.from_numpy(img)
+
+        # Ensure tensor is float32
+        if img_tensor.dtype != torch.float32:
+            img_tensor = img_tensor.float()
+
+        # Normalize to [0.0, 1.0]
+        if is_12_bit_data:
+            img_tensor /= 4095.0
+        else:
+            # This handles uint8 images (max 255) or float32 images that might have been
+            # previously normalized by Albumentations (e.g. from uint8 to float32 [0,1]).
+            # Only divide by 255.0 if the max value is still greater than 1.0,
+            # indicating it hasn't been normalized to the [0,1] range yet.
+            if img_tensor.max().item() > 1.0 + 1e-5:
+                 img_tensor /= 255.0
+            
+        # Ensure clamping after any division to strictly be in [0.0, 1.0]
+        img_tensor = torch.clamp(img_tensor, 0.0, 1.0)
+
+        return img_tensor, labels_out, self.im_files[index], shapes
 
     def load_image(self, i):
         """
