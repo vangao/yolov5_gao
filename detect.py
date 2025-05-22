@@ -185,8 +185,20 @@ def run(
     for path, im, im0s, vid_cap, s in dataset:
         with dt[0]:
             im = torch.from_numpy(im).to(model.device)
-            im = im.half() if model.fp16 else im.float()  # uint8 to fp16/32
-            im /= 255  # 0 - 255 to 0.0 - 1.0
+            # im_dtype_original = im.dtype # Optional: Store original dtype if needed later, though max check is used here.
+            
+            im = im.half() if model.fp16 else im.float()  # Convert to float (fp16 or fp32)
+                                                          # If 'im' came from a uint16 numpy array 
+                                                          # (e.g. 12-bit TIFF data, 0-4095 range after >>4 shift), 
+                                                          # its values are still in that original range.
+                                                          # If from uint8, values are in 0-255 range.
+
+            # Determine normalization factor based on the approximate range of the float tensor values.
+            # A simple check of the max value can distinguish between 0-255 range and 0-4095 range.
+            if im.max().item() > 256.0:  # If max value suggests it's not 8-bit data (e.g. > 255 after float conversion)
+                im /= 4095.0  # Normalize 12-bit data (assumed to be 0-4095 after any prior shifts) to 0-1
+            else:
+                im /= 255.0   # Normalize 8-bit data (assumed to be 0-255) to 0-1
             if len(im.shape) == 3:
                 im = im[None]  # expand for batch dim
             if model.xml and im.shape[0] > 1:
