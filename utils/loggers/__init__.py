@@ -1,6 +1,8 @@
 # Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
 """Logging utils."""
 
+import numpy as np
+
 import json
 import os
 import warnings
